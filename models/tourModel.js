@@ -1,47 +1,47 @@
 //We use Schema to describe our data, to set default values, to validate the data and all kinds of stuffs
-const mongoose = require('mongoose');
-const slugify = require('slugify');
-const validator = require('validator'); //For validation
-const User = require('./userModel');
+const mongoose = require("mongoose");
+const slugify = require("slugify");
+const validator = require("validator"); //For validation
+const User = require("./userModel");
 const tourSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, 'A tour must have a name'],
+      required: [true, "A tour must have a name"],
       unique: true,
       trim: true, //remove all the white space in the begining and the of the string
       maxlength: [
         40,
-        'The tour name must have less or equal than 40 characters',
+        "The tour name must have less or equal than 40 characters",
       ],
       minLength: [
         10,
-        'The tour name must have more or equal than 10 characters',
+        "The tour name must have more or equal than 10 characters",
       ],
       // validate: [validator.isAlpha, 'Tour name must only contain characters'],
     },
     slug: String,
     duration: {
       type: Number,
-      required: [true, 'A tour must have a duration'],
+      required: [true, "A tour must have a duration"],
     },
     maxGroupSize: {
       type: Number,
-      required: [true, 'A tour must have a group size'],
+      required: [true, "A tour must have a group size"],
     },
     difficulty: {
       type: String,
-      required: [true, 'A tour must have a difficulty'],
+      required: [true, "A tour must have a difficulty"],
       enum: {
-        values: ['easy', 'medium', 'difficult'],
-        message: 'Difficulty is either: easy, medium, difficult',
+        values: ["easy", "medium", "difficult"],
+        message: "Difficulty is either: easy, medium, difficult",
       },
     },
     ratingsAverage: {
       type: Number,
       default: 4.5,
-      min: [1, 'Rating must be above 1.0'],
-      max: [5, 'Rating must be below 5.0'],
+      min: [1, "Rating must be above 1.0"],
+      max: [5, "Rating must be below 5.0"],
       set: (val) => {
         return Math.round(val * 10) / 10;
       },
@@ -52,7 +52,7 @@ const tourSchema = new mongoose.Schema(
     },
     price: {
       type: Number,
-      required: [true, 'A tour must have a price'],
+      required: [true, "A tour must have a price"],
     },
     priceDiscount: {
       type: Number,
@@ -61,13 +61,13 @@ const tourSchema = new mongoose.Schema(
         validator: function (val) {
           return val <= this.price;
         }, //tp create our validator
-        message: 'Dicount price ({VALUE}) should be below the regular price',
+        message: "Dicount price ({VALUE}) should be below the regular price",
       },
     },
     summary: {
       type: String,
       trim: true, //remove all the white space in the begining and the of the string
-      required: [true, 'A tour must have a description'],
+      required: [true, "A tour must have a description"],
     },
     description: {
       type: String,
@@ -75,7 +75,7 @@ const tourSchema = new mongoose.Schema(
     },
     imageCover: {
       type: String,
-      required: [true, 'A tour must have a cover image'],
+      required: [true, "A tour must have a cover image"],
     },
     images: [String],
     createAt: {
@@ -93,8 +93,8 @@ const tourSchema = new mongoose.Schema(
       //GeoJSON to specify geospatial DATA
       type: {
         type: String,
-        default: 'Point',
-        enum: ['Point'],
+        default: "Point",
+        enum: ["Point"],
       },
       coordinates: [Number],
       address: String,
@@ -104,8 +104,8 @@ const tourSchema = new mongoose.Schema(
       {
         type: {
           type: String,
-          default: 'Point',
-          enum: ['Point'],
+          default: "Point",
+          enum: ["Point"],
         },
         coordinates: [Number],
         address: String,
@@ -116,36 +116,36 @@ const tourSchema = new mongoose.Schema(
     guides: [
       {
         type: mongoose.Schema.ObjectId,
-        ref: 'User',
+        ref: "User",
       },
     ],
   },
   {
     toJSON: { virtuals: true }, //each time the data is ouputted as JSON
     toObject: { virtuals: true },
-  },
+  }
 );
 
 //index help the search faster
 tourSchema.index({ price: 1, ratingsAverage: -1 });
 tourSchema.index({ slug: 1 });
-tourSchema.index({ startLocation: '2dsphere' });
+tourSchema.index({ startLocation: "2dsphere" });
 //Virtual properties are fields we can create on Shema but will not be persisted, they will not be saved in dataabse
 // This propery will be available as soon as we get the data
-tourSchema.virtual('durationWeeks').get(function () {
+tourSchema.virtual("durationWeeks").get(function () {
   return this.duration / 7;
 });
 
 //Virtual populate
-tourSchema.virtual('reviews', {
-  ref: 'Review',
-  foreignField: 'tour',
-  localField: '_id',
+tourSchema.virtual("reviews", {
+  ref: "Review",
+  foreignField: "tour",
+  localField: "_id",
 });
 
 //document middlware: runs before the save() and create(), but not insert()
 //each middleware has access to next in mongoose
-tourSchema.pre('save', function (next) {
+tourSchema.pre("save", function (next) {
   this.slug = slugify(this.name, { lower: true });
   next();
 });
@@ -161,8 +161,7 @@ tourSchema.pre('save', function (next) {
 // });
 
 //post middleware happens after all the pre-middlware and can access to doc
-tourSchema.post('save', function (doc, next) {
-  console.log(doc);
+tourSchema.post("save", function (doc, next) {
   next();
 });
 
@@ -177,14 +176,13 @@ tourSchema.pre(/^find/, function (next) {
 
 tourSchema.pre(/^find/, function (next) {
   this.populate({
-    path: 'guides',
-    select: '-__v',
+    path: "guides",
+    select: "-__v",
   });
   next();
 });
 
 tourSchema.post(/^find/, function (doc, next) {
-  console.log(`Query took: ${Date.now() - this.start} milliseconds`);
   next();
 });
 
@@ -198,7 +196,7 @@ tourSchema.post(/^find/, function (doc, next) {
 // });
 
 //Creating model -> creating API
-const Tour = mongoose.model('Tour', tourSchema);
+const Tour = mongoose.model("Tour", tourSchema);
 
 module.exports = Tour;
 
