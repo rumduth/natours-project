@@ -1,0 +1,218 @@
+const fs = require('fs');
+const Tour = require('./../models/tourModel');
+const AppError = require('./../utils/appError');
+const catchAsync = require('./../utils/catchAsync'); //useful to remove try/catch with repetitve code
+const factory = require('./handlerFactory');
+const multer = require('multer');
+const sharp = require('sharp');
+// const tours = JSON.parse(
+//   fs.readFileSync(`${__dirname}/../dev-data/data/tours-simple.json`),
+// );
+
+const multerStorage = multer.memoryStorage();
+
+const multerFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image')) {
+    cb(null, true);
+  } else {
+    cb(new AppError('Not an image! Please upload only images', 400), false);
+  }
+};
+
+const upload = multer({ storage: multerStorage, fileFilter: multerFilter });
+
+exports.uploadTourImages = upload.fields([
+  {
+    name: 'imageCover',
+    maxCount: 1,
+  },
+  { name: 'images', maxCount: 3 },
+]);
+// upload.array('images', 5);
+
+exports.resizeTourImages = catchAsync(async (req, res, next) => {
+  if (!req.files.imageCover || !req.files.images) return next();
+  // 1. Cover image
+  req.body.imageCover = `tour-${req.params.id}-${Date.now()}-cover.jpeg`;
+  await sharp(req.files.imageCover[0].buffer)
+    .resize(2000, 1333)
+    .toFormat('jpeg')
+    .jpeg({ quality: 90 })
+    .toFile(`public/img/tours/${req.body.imageCover}`);
+
+  //2, Images
+  req.body.images = [];
+  await Promise.all(
+    req.files.images.map(async (file, i) => {
+      const filename = `tour-${req.params.id}-${Date.now()}-${i + 1}.jpeg`;
+      await sharp(file.buffer)
+        .resize(2000, 1333)
+        .toFormat('jpeg')
+        .jpeg({ quality: 90 })
+        .toFile(`public/img/tours/${filename}`);
+      req.body.images.push(filename);
+    }),
+  );
+  next();
+});
+exports.getAllTours = factory.getAll(Tour);
+exports.getTour = factory.getOne(Tour, { path: 'reviews' });
+exports.createTour = factory.createOne(Tour);
+exports.updateTour = factory.updateOne(Tour);
+exports.deleteTour = factory.deleteOne(Tour);
+
+// Alias top Tours --> used as the middleware for getting All tours when we want to get cheapest tours
+exports.aliasTopTours = (req, res, next) => {
+  req.query.limit = 5;
+  req.query.sort = '-ratingsAverage price';
+  req.query.fields = 'name price ratingsAverage summary difficulty';
+  next();
+};
+
+exports.getTourStats = catchAsync(async (req, res, next) => {
+  //Aggeregate Object and await to execute
+  const stats = await Tour.aggregate([
+    { $match: { ratingsAverage: { $gte: 3.5 } } },
+    {
+      $group: {
+        // _id: null, // id helps to set up the group by column
+        // _id: '$difficulty',
+        // _id: '$ratingsAverage',
+        _id: { $toUpper: '$difficulty' },
+        numTours: { $sum: 1 }, //adding 1 for each document
+        avgRating: { $avg: '$ratingsAverage' },
+        avgPrice: { $avg: '$price' },
+        minPrice: { $min: '$price' },
+        maxPrice: { $max: '$price' },
+      },
+    },
+    {
+      $sort: { avgPrice: 1 }, //sorting ascending
+    },
+    // {
+    //   $match: { _id: { $ne: 'EASY' } },
+    // },
+  ]);
+  res.status(200).json({
+    status: 'success',
+    data: {
+      stats,
+    },
+  });
+});
+
+exports.getMonthlyPlan = catchAsync(async (req, res, next) => {
+  const year = req.params.year * 1;
+  const plan = await Tour.aggregate([
+    {
+      $unwind: '$startDates', //deconstruct an array field of the elments and then output one document for each element of the array
+    },
+    {
+      $match: {
+        startDates: {
+          $gte: new Date(`${year}-01-01`),
+          $lt: new Date(`${year + 1}-01-01`),
+        },
+      },
+    },
+    {
+      $group: {
+        _id: { $month: '$startDates' },
+        numToursStart: { $sum: 1 },
+        tour: { $push: '$name' }, //push each name of document in the array
+      },
+    },
+    {
+      $addFields: { month: '$_id' }, //to add a field in the query
+    },
+    {
+      $project: {
+        _id: 0, //set O to make _id not appear in the search
+      },
+    },
+    {
+      $sort: {
+        numToursStart: -1,
+      },
+    },
+    {
+      $limit: 6,
+    },
+  ]);
+  res.status(200).json({
+    status: 'success',
+    result: plan.length,
+    data: {
+      plan,
+    },
+  });
+});
+
+exports.getToursWithin = catchAsync(async (req, res, next) => {
+  const { distance, latlng, unit } = req.params;
+  const [lat, lng] = latlng.split(',');
+
+  const radius = unit === 'mi' ? distance / 3963.2 : distance / 6378.1;
+  if (!lat || !lng) {
+    return next(
+      new AppError(
+        'Please provide latitude and longitude in the format lat, lng.',
+        400,
+      ),
+    );
+  }
+
+  const tours = await Tour.find({
+    startLocation: { $geoWithin: { $centerSphere: [[lng, lat], radius] } },
+  });
+
+  res.status(200).json({
+    status: 'success',
+    results: tours.length,
+    data: {
+      data: tours,
+    },
+  });
+});
+
+exports.getDistances = catchAsync(async (req, res, next) => {
+  const { latlng, unit } = req.params;
+  const [lat, lng] = latlng.split(',');
+
+  const multiplier = unit === 'mi' ? 0.000621371 : 0.001;
+  // const radius = unit === 'mi' ? distance / 3963.2 : distance / 6378.1;
+  if (!lat || !lng) {
+    return next(
+      new AppError(
+        'Please provide latitude and longitude in the format lat, lng.',
+        400,
+      ),
+    );
+  }
+
+  const distances = await Tour.aggregate([
+    {
+      $geoNear: {
+        near: {
+          type: 'Point',
+          coordinates: [lng * 1, lat * 1],
+        },
+        distanceField: 'distance',
+        distanceMultiplier: multiplier,
+      },
+    },
+    {
+      $project: {
+        distance: 1,
+        name: 1,
+      },
+    },
+  ]);
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      data: distances,
+    },
+  });
+});
