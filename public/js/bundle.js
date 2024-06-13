@@ -10367,6 +10367,31 @@
     }
   };
 
+  // public/js/signup.js
+  var signup = async (name, email, password, passwordConfirm) => {
+    console.log(name, email, password, passwordConfirm);
+    try {
+      const res = await axios_default({
+        method: "POST",
+        url: "http://127.0.0.1:3000/api/v1/users/signup",
+        data: {
+          name,
+          email,
+          password,
+          passwordConfirm
+        }
+      });
+      if (res.data.status === "success") {
+        showAlert("success", "Sign up successfully");
+        window.setTimeout(() => {
+          location.assign("/me");
+        }, 1500);
+      }
+    } catch (err) {
+      showAlert("error", err.response.data.message);
+    }
+  };
+
   // public/js/index.js
   var mapBox = document.getElementById("map");
   var loginForm = document.querySelector(".form--login");
@@ -10374,6 +10399,8 @@
   var userDataForm = document.querySelector(".form-user-data");
   var userPasswordForm = document.querySelector(".form-user-password");
   var bookBtn = document.getElementById("book-tour");
+  var signupForm = document.querySelector(".form--signup");
+  var bookingConfirm = document.querySelector(".booking");
   if (mapBox) {
     const locations = JSON.parse(
       document.getElementById("map").dataset.locations
@@ -10386,7 +10413,6 @@
   if (loginForm) {
     loginForm.addEventListener("submit", (e) => {
       e.preventDefault();
-      const form = new FormData();
       const email = document.getElementById("email").value;
       const password = document.getElementById("password").value;
       login(email, password);
@@ -10425,5 +10451,18 @@
       const tourID = e.target.dataset.tourId;
       await bookTour(tourID);
     });
+  }
+  if (signupForm) {
+    signupForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("name").value;
+      const email = document.getElementById("email--signup").value;
+      const password = document.getElementById("password--signup").value;
+      const passwordConfirm = document.getElementById("confirm-password").value;
+      await signup(name, email, password, passwordConfirm);
+    });
+  }
+  if (bookingConfirm) {
+    showAlert("success", "Booking succesfully");
   }
 })();

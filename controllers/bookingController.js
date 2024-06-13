@@ -27,7 +27,7 @@ exports.getCheckoutSession = catchAsync(async (req, res, next) => {
             name: `${tour.name} Tour`,
             description: tour.summary,
             images: [
-              `${req.protocol}://${req.get("host")}/image/tours/${tour.imageCover}`,
+              `${req.protocol}://${req.get("host")}/img/tours/${tour.imageCover}`,
             ],
           },
           unit_amount: tour.price * 100, // Ensure price is in cents
@@ -46,10 +46,18 @@ exports.getCheckoutSession = catchAsync(async (req, res, next) => {
 exports.createBookingCheckout = catchAsync(async (req, res, next) => {
   const { tour, user, price } = req.query;
   if (!tour || !user || !price) return next();
-
   await Booking.create({ tour, user, price });
-  console.log();
-  res.redirect(`${req.protocol}://${req.get("host")}/my-tours`);
+
+  res.locals.bookingSuccesfully = true;
+
+  const bookings = await Booking.find({ user });
+  const tourIDs = bookings.map((el) => el.tour);
+  const tours = await Tour.find({ _id: { $in: tourIDs } });
+
+  res.status(200).render("overview", {
+    title: "My Tours",
+    tours,
+  });
 });
 
 const createBookingCheckout_webhook = async (session) => {
