@@ -49,8 +49,8 @@ exports.createBookingCheckout = catchAsync(async (req, res, next) => {
   await Booking.create({ tour, user, price });
 
   res.locals.bookingSuccesfully = true;
-
-  const bookings = await Booking.find({ user });
+  res.locals.user = await User.findById(user);
+  const bookings = await Booking.find({ user: user });
   const tourIDs = bookings.map((el) => el.tour);
   const tours = await Tour.find({ _id: { $in: tourIDs } });
 

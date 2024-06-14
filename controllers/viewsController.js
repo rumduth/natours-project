@@ -5,7 +5,16 @@ const User = require("./../models/userModel");
 const Booking = require("./../models/bookingModel");
 exports.getOverview = catchAsync(async (req, res, next) => {
   //1. Get tour data from collections
-  const tours = await Tour.find({});
+  let tours;
+  if (req.user) {
+    console.log("Yes");
+    const bookingTours = await Booking.find({ user: req.user.id });
+    const bookedToursID = bookingTours.map((el) => el.tour);
+    tours = await Tour.find({ _id: { $nin: bookedToursID } });
+  } else {
+    tours = await Tour.find({});
+  }
+
   //2. Build template
 
   //3. render that template using the tour data from step 1
@@ -61,7 +70,6 @@ exports.getMyTours = catchAsync(async (req, res, next) => {
   //2. find tours with the returned IDs
   const tourIDs = bookings.map((el) => el.tour);
   const tours = await Tour.find({ _id: { $in: tourIDs } });
-
   res.status(200).render("overview", {
     title: "My Tours",
     tours,
